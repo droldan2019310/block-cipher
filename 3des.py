@@ -1,5 +1,5 @@
 from Crypto.Cipher import DES3
-from manual_padding import pkcs7_pad as pad, pkcs7_unpad as unpad
+from Crypto.Util.Padding import pad, unpad
 from generacion_llaves import generate_3des_key, generate_iv
 
 def encrypt_3des_cbc(plaintext: bytes, key: bytes, iv: bytes) -> bytes:
