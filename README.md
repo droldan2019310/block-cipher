@@ -57,25 +57,218 @@ ciphertext = encrypt_des_ecb(b"Mensaje", key)
 plaintext = decrypt_des_ecb(ciphertext, key)
 ```
 
-## Respuestas a Preguntas de Análisis
+## Respuestas a Preguntas de Análisis (Parte 2: Análisis de Seguridad)
 
-### Análisis visual de las vulnerabilidades del modo ECB
-Al ejecutar `src/aes_cipher.py`, se toma una imagen con un patrón (fondo de cuadrícula de color) y se cifra usando el modo ECB. Dado que ECB cifra bloques idénticos de texto plano exactamente con el mismo bloque de texto cifrado, los patrones uniformes en la imagen original (como un fondo blanco continuo) mantienen su estructura original en el criptograma final. Como puede verse al abrir `images/aes_ecb.bmp`, **el contenido visual o la silueta original se puede distinguir fácilmente**, incluso estando la información cifrada. 
+### 2.1 Análisis de Tamaños de Clave (4 puntos)
+* **Pregunta:** ¿Qué tamaño de clave está usando para DES, 3DES y AES? Para cada uno indique tamaño en bits y bytes.
+* **Respuesta:**
+  * **DES**: 8 bytes (64 bits, de los cuales 56 bits son efectivos y 8 son para bit de paridad).
+  * **3DES**: 24 bytes (192 bits, equivalentes a 3 claves de 8 bytes en nuestro caso de uso con esquema de triple llave K1, K2, K3).
+  * **AES**: 32 bytes (256 bits).
 
-Por el contrario, el modo CBC utiliza un vector de inicialización (IV) y encadena los bloques. Por ende, el mismo bloque de información (`0xFFFFFF`) cifrado se transforma en texto cifrado diferente cada vez, derivando en que la imagen `images/aes_cbc.bmp` luzca como un ruido pseudoaleatorio, sin ningún patrón reconocible y protegiendo de verdad el contenido original.
+* **Pregunta:** Explique por qué DES se considera inseguro hoy en día y calcule cuánto tiempo tomaría un ataque de fuerza bruta con hardware moderno.
+* **Respuesta:**
+  * DES es inseguro debido a su pequeña longitud de clave efectiva que se limita únicamente a 56 bits. El espacio de búsqueda total es de $2^{56}$ combinaciones (72,057,594,037,927,936 posibles claves).
+  * Con hardware convencional moderno (simulando un ataque distribuido que prueba 1 billón = $10^{12}$ combinaciones por segundo, lo cual es bajo actualmente): un ataque de fuerza bruta tardaría **72057.59 segundos**, equivalente a unas limitadas **20 horas** en ser perpetrado exitosamente.
 
-### Importancia del Padding, Vectores de Inicialización (IV) y Tamaños de Clave
-* **Padding:** Los algoritmos de cifrado en bloque necesitan que los mensajes sean múltiples exactos del tamaño de bloque (ej. 8 bytes para DES/3DES y 16 bytes para AES). El uso adecuado del padding garantiza que cualquier tamaño de mensaje pueda ajustarse a esta restricción (evitando errores) y además provee mecanismos durante el descifrado (como PKCS#7) para asegurar y validar de manera estricta que la información no está corrompida, garantizando integridad referencial.
-* **Vector de Inicialización (IV):** Evita el problema visto en el modo ECB con la repetición de patrones. Un IV debe ser único (aleatorio o un pseudo-nonce) para cada mensaje distinto cifrado bajo la misma clave para introducir variabilidad o "ruido" inicial y hacer que textos idénticos resulten en criptogramas completamente distintos. **Nota:** *En una implementación del mundo real, el IV no es secreto, pero es necesario para la desencripción. Típicamente el IV (que no necesita ir cifrado y tiene un tamaño de 8 o 16 bytes) se concatena al inicio del mensaje cifrado (`IV + criptograma`). El cliente receptor lo extrae leyendo la primera cuota de bytes dependiente al tamaño de bloque y descifra la porción restante del texto cifrado.*
-* **Tamaños de Clave:** Las claves dirigen el funcionamiento interno de las rondas de sustitución y permutación. Claves cortas (ej. 56 bits de DES efectivo) son vulnerables a ataques de fuerza bruta usando tecnología computacional contemporánea. Claves más largas como AES-256 incrementan el tiempo de búsqueda necesario a miles de años (haciendo estos ataques impracticables) y mejorando exponencialmente la resistencia ante ataques conocidos y análisis criptográfico actual e incluso futuro (cuántico).
+* **Requisito (Código de generación y longitud):**
+  ```python
+  from src.utils import generate_des_key, generate_3des_key, generate_aes_key
 
-### Demostración práctica de por qué usar DES/3DES y modos como ECB están deprecados
-* **DES (Data Encryption Standard):** Es inseguro debido a su pequeña clave efectiva de 56 bits. Con poder computacional suficiente, se puede aplicar la fuerza bruta fácilmente.
-* **3DES (Triple DES):** Aunque introducido para mitigar flaquezas temporales de DES mediante usar 3 llaves aplicadas consecutivamente, es muy ineficiente e intrínsecamente lento.
-  * **2 claves (16 bytes) vs 3 claves (24 bytes):** Con 2 llaves (K1, K2, K1) se cifraba primero con K1, descifraba con K2 y se volvía a cifrar con K1, logrando una efectividad cercana a ~112 bits. Sin embargo, ataques modernos demostraron que el esquema de 2 clases presenta severas vulnerabilidades. Se recomendó el esquema de 3 llaves (K1, K2, K3), que ofrece mitigación, pero manteniendo la sobrecarga de 3 operaciones consecutivas, y por lo tanto 3DES como estándar actualmente también es obsoleto en favor de **AES**.
-* **ECB (Electronic Codebook):** Su falla principal al descuidar la variabilidad (mismo input siempre produce mismo output bajo una misma llave) resalta en análisis de frecuencia, deduciéndose partes de la información original según el caso de uso (como se demuestra gráficamente en este repositorio con las imágenes de ECB vs CBC). Todos estos algoritmos y modos no deberían ser implementados en un ambiente de desarrollo o producción el día de hoy.
+  # Claves autogeneradas
+  des_key = generate_des_key()
+  print(f"DES: {len(des_key)} bytes ({len(des_key)*8} bits efectivos 56 + paridad)")
 
-## Proceso de Testing (Documentación)
+  des3_key = generate_3des_key(3) # Opción de 24 bytes (3 llaves aplicadas consecutivamente)
+  print(f"3DES: {len(des3_key)} bytes ({len(des3_key)*8} bits efectivos 168 + paridad)")
+
+  aes_key = generate_aes_key(256) # AES 256
+  print(f"AES: {len(aes_key)} bytes ({len(aes_key)*8} bits)")
+  ```
+
+### 2.2 Comparación de Modos de Operación (5 puntos)
+* **Pregunta:** Compare ECB vs CBC
+  * *¿Qué modo de operación implementó en cada algoritmo?*
+    * En **DES**, se implementó el modo **ECB** (`encrypt_des_ecb`, `decrypt_des_ecb`) con padding PKCS#7 manual.
+    * En **3DES**, se implementó el modo **CBC** (`encrypt_3des_cbc`, `decrypt_3des_cbc`) con un vector de inicialización IV de 8 bytes.
+    * En **AES**, se implementaron de igual manera ambos modos, **ECB** (`encrypt_image_ecb`) y **CBC** (`encrypt_image_cbc`), para la experimentación con imágenes.
+  * *¿Cuáles son las diferencias fundamentales entre ECB y CBC?*
+    * **ECB (Electronic Codebook):** Cada bloque de texto plano se cifra repetida e independientemente bajo la misma clave. Bloques idénticos de texto plano producen bloques idénticos en el criptograma. Falla en ocultar variabilidad de la información original.
+    * **CBC (Cipher Block Chaining):** Utiliza un Vector de Inicialización (IV). Cada bloque de texto plano se combina con la operación XOR (OR Exclusivo) con el bloque cifrado *anterior* a él en la cadena antes de ser cifrado, asegurando que bloques idénticos de texto plano resulten en diferentes bloques visuales y computacionales para esconder la semántica original determinísticamente si se cuenta con el IV base.
+  * *¿Se puede notar la diferencia directamente en una imagen?*
+    * Sí, en el cifrado de la imagen mediante **ECB**, los píxeles idénticos de distintos subcampos mantienen los mismos valores, filtrando las geometrías y el formato al aplicar la visibilidad del patrón de píxeles del cifrado, mientras que nada se distingue en la encriptación paralela bajo derivaciones de bloque recursivas dependientes del nonce en modo CBC.
+
+* **Requisito (Imágenes y patrones):**
+  * Podemos notar los bordes y patrones de la cuadrícula repetida en ECB porque al estar conformada cada celda local por bytes idénticos entre sí, generan exactamente las mismas transformaciones encriptadas en píxeles. En CBC aparece simplemente un ruido completamente aleatorio en el layout de donde nada puede distinguirse.
+  
+  <p align="center">
+    <img src="images/original.bmp" height="200" />
+    <img src="images/aes_ecb.bmp" height="200" />
+    <img src="images/aes_cbc.bmp" height="200" />
+  </p>
+  <p align="center">
+    <i>(Izquierda: Original BMP, Centro: Cifrado modo puro ECB, Derecha: Cifrado pseudoaleatorio modo CBC)</i>
+  </p>
+
+* **Requisito (Código para generar las imágenes en src/aes_cipher.py):**
+  ```python
+  key = generate_aes_key(256)
+  iv = generate_iv(AES.block_size) # 16 bytes
+  
+  # Cifrar imagen en modo ECB (Preservará estructura del tablero de ajedrez)
+  encrypt_image_ecb('images/original.bmp', 'images/aes_ecb.bmp', key)
+  
+  # Cifrar imagen en modo CBC (Ruido uniforme pseudo-aleatorizado)
+  encrypt_image_cbc('images/original.bmp', 'images/aes_cbc.bmp', key, iv)
+  ```
+
+### 2.3 Vulnerabilidad de ECB (6 puntos)
+* **Pregunta:** ¿Por qué no debemos usar ECB en datos sensibles?
+  Porque filtra información acerca del contenido general e idéntico original debido a las repeticiones directas. Un input genera de manera idéntica su equivalente output si se procesa usando exactamente el mismo estado global (llave).
+
+* **Requisitos (Ejemplo de repetición ATAQUE):**
+  Para probar este comportamiento, usamos el mensaje estructurado de 42 bytes `ATAQUE_ATAQUE___ATAQUE_ATAQUE___EXTRA_DATA` el cual está compuesto estratégicamente por dos bloques de bytes exactamente iguales (de 16 bytes o 1 bloque de AES cada uno) concatenados seguido de información extra.
+
+  *Código de experimentación:*
+  ```python
+  from Crypto.Cipher import AES
+  from Crypto.Util.Padding import pad
+
+  msg_vuln = b"ATAQUE_ATAQUE___ATAQUE_ATAQUE___EXTRA_DATA"
+  padded_msg = pad(msg_vuln, 16) 
+
+  cipher_ecb = AES.new(aes_key, AES.MODE_ECB)
+  cipher_cbc = AES.new(aes_key, AES.MODE_CBC, iv=generate_iv(16))
+
+  ct_ecb = cipher_ecb.encrypt(padded_msg)
+  ct_cbc = cipher_cbc.encrypt(padded_msg)
+  ```
+
+  **Salida en Hexadecimal:**
+  ```text
+  --- Resultados ECB ---
+  Bloque 1 (ATAQUE_ATAQUE___): 1b44b37a6e5e11171de863e1a7fe08d1  # <- ¡IGUAL!
+  Bloque 2 (ATAQUE_ATAQUE___): 1b44b37a6e5e11171de863e1a7fe08d1  # <- ¡IGUAL!
+  Bloque 3 (EXTRA_DATA)      : 8d18a63cb53337463a7a7915f5bcad06
+
+  --- Resultados CBC ---
+  Bloque 1: 8eeb1e9f183b99dd000d597416bf0f8f  # <- Aleatorio/Diferentes
+  Bloque 2: f13b4f2d284db042436956f03e60b2ac  # <- Combinados con xor encadenado
+  Bloque 3: 0d4fee74485eb7fdcdc671100a8ab0a3
+  ```
+  * *¿Qué información podría filtrar esto en un escenario real?*
+  Si se cifran datos sensibles y altamente estructurados (como registros JSON, campos base de un perfil médico de "NEGATIVO"/"POSITIVO", formularios bancarios o contraseñas), un intruso pasivo de la red (Man-in-the-Middle) que no conozca la llave, de todas maneras podría deducir qué datos son iguales mediante un *análisis de frecuencia computacional de los bloques cifrados que intercepta*, filtrando y comprometiendo de esta manera patrones determinísticos de usuarios en el negocio real de la data.
+
+### 2.4 Vector de Inicialización (IV) (4 puntos)
+* **Pregunta:** ¿Qué es el IV y por qué es necesario en CBC pero no en ECB?
+  El IV es un elemento aleatorio (generado una sola vez que funge como nonce) emparejado e utilizado en el paso de cifrado XOR del nivel del primer bloque del texto introductorio en el modo **CBC** para brindarle una pre-variabilidad, corrompiendo en cadena a todos los subsiguientes bloques de texto sin estar codificado de manera fija desde el inicio usando la llave en bruto. No es implementable en **ECB** ya que este modo cifra cada uno de los bloques aislados limitados a la base estática de su propia llave simétrica sin transferir propiedades.
+
+* **Requisitos (Experimento de cifrado de transacciones recurrentes con limitante de IVs en modo CBC):**
+  *Código de experimentación:*
+  ```python
+  from Crypto.Cipher import AES
+  from Crypto.Util.Padding import pad
+  from src.utils import generate_iv
+  
+  msg_iv = b"Mensaje confidencial"
+
+  iv1 = generate_iv(16)
+  iv2 = generate_iv(16)
+
+  cipher_cbc_1 = AES.new(aes_key, AES.MODE_CBC, iv=iv1)
+  cipher_cbc_2 = AES.new(aes_key, AES.MODE_CBC, iv=iv1) # <-- Usaremos el Mismo IV
+  cipher_cbc_3 = AES.new(aes_key, AES.MODE_CBC, iv=iv2) # <-- IV Diferente Nuevo generado
+
+  ct1 = cipher_cbc_1.encrypt(pad(msg_iv, 16))
+  ct2 = cipher_cbc_2.encrypt(pad(msg_iv, 16))
+  ct3 = cipher_cbc_3.encrypt(pad(msg_iv, 16))
+  ```
+
+  **Resultados de Criptogramas (Hexadecimal):**
+  ```text
+  CT1 (Usando IV Original)     : 67a961a5350971b86c4f6c02ff2eafeb7435e5d8e0a1ff8612c28df9780aaf2d
+  CT2 (Mismo IV Inseguro)      : 67a961a5350971b86c4f6c02ff2eafeb7435e5d8e0a1ff8612c28df9780aaf2d  # Igual a CT1
+  CT3 (Reuso Seguro IV Nuevo)  : 000dfbdb372385e811417978249186e4a4c4c7f2669afb3a70dd8cd84313a691  # Bloque único irrepetible
+  ```
+
+  * *Explique qué pasaría si un atacante intercepta mensajes cifrados con el mismo IV repetidamente:*
+  Al emitir un mensaje determinístico bajo la misma llave y siempre el mismo IV en el tiempo (ej. enviar un comando "EJECUTAR_TRANSFERENCIA_PAGO_JUAN"), el "Cipher Text" resultante de la transa será predeciblemente estático de nuevo. El atacante podría interceptar su contenido en red, y guardarlo (sin importar al ser incapaz de adivinar qué transita). Si es reenviado más tarde como un **Replay Attack** el atacador malicioso inyectará este paquete enrutándolo al servidor original produciendo transacciones ilegales y engañando a las protecciones que hubiese tenido el backend.
+
+### 2.5 Padding (3 puntos)
+* **Pregunta:** ¿Qué es el padding y por qué es necesario?
+  Los algoritmos definidos en bloque operan usando fragmentos fijos forzados (usualmente 16 bytes o típicamente 8 bytes según el estándar limitante). Si un ingeniero desea subir data de tipo longitud no compatible de carácter asimétrico (ejem: 5 bytes), el padding se agrega al final del archivo antes de inyectarse como *relleno* estructural simulado que se estandarize dentro de la función criptográfica sin romper la memoria física.
+
+* **Requisitos (Resultados implementando nuestra propia técnica de padding `pkcs7_pad(data, 8)` para un block_size de DES de 8):**
+
+  ```text
+  # Mensaje de 5 bytes 
+  Padded: b'12345\x03\x03\x03' (Longitud final en bloque = 8 bytes)
+  Se agregaron 3 bytes con un valor estricto de padding '0x03' cada uno, para ajustarlo de 5 a la exigencia de 8 bytes de bloque simétrico.
+
+  # Mensaje de 8 bytes (Exactamente concordante a un bloque entero de 8 DES)
+  Padded: b'12345678\x08\x08\x08\x08\x08\x08\x08\x08' (Longitud final concatenando = 16 bytes)
+  Dado que este plaintext ya consta de una alineación perfecta de 8 bytes de largo, en los protocolos probados y estandarizados PKCS#7 se DEBE crear un bloque vacío y rellenar iterativamente en todos sus espacios con el largo respectivo (8 bytes adicionales del valor `\x08` como indicador). De no rellenarse por default, al desencriptarse el sistema consumiría una letra vital (`'8'`) como si fuera el largo del padding en sí durante el descarte fallando horriblemente, se mitiga rellenando ceguera con el valor propio de un bloque en bits.
+
+  # Mensaje de 10 bytes 
+  Padded: b'1234567890\x06\x06\x06\x06\x06\x06' (Total 16 bytes)
+  Ocupó 1 bloque entero cabalmente empaquetado y el siguiente bloque residual se desbordó tomando dos slots valiosos. Por defecto se agregaron como sobrante los 6 elementos limitantes correspondientes restantes para equilibrar el conjunto en dos porciones fijadas, caracterizando un relleno '0x06' hacia la meta de 8.
+  ```
+
+  * *Demuestre que nuestra función manual de ingeniería `pkcs7_unpad` recupera el mensaje original cortándolo:*
+  ```python
+  from src.utils import pkcs7_unpad
+  pad_5 = b'12345\\x03\\x03\\x03'
+  recuperado = pkcs7_unpad(pad_5, block_size=8)
+  print(recuperado) # Resultado Final Impreso de Desencripción: b'12345'
+  ```
+  La función evaluada extrajo del index final de lista el último parámetro (`'\\x03'`), el cual le indicó lógicamente la longitud base restante del array a limpiar, una validación posterior descartó las ocurrencias de iteración cortando un total `len("0x03")` del string dejándolo purgado en el valor real `"12345"`.
+
+### 2.6 Recomendaciones de Uso (3 puntos)
+* **Pregunta:** ¿En qué situaciones se recomienda cada modo de operación? ¿Cómo elegir un modo seguro en cada lenguaje de programación contemporánea?
+
+| Modo | Casos de uso recomendados | Desventajas evidentes |
+| :--- | :--- | :--- |
+| **ECB** | Ninguno por lo general. A veces localmente para cifrar bloques puramente aleatorios unificados. | Esencialmente inseguro frente un análisis moderno de datos; revela sin control estructuras colindantes repetidas en base a estadísticas. |
+| **CBC** | Protocolos de pasajes de carga y paquetes, correos a retención por encriptación, almacenamiento a disco directo cuando se exige confidencialidad base. | Paralelizar un bloque cifrado o descifrado es imposible por su diseño de dependencia recurrente. Obligación de un padding. Vulnerabilidades a ataques de manipulación u *Oracle Padding*. |
+| **CTR** | Streaming de volúmenes de datos masivos en tiempo veloz a bajo costo computacional, buffers reducidos. | Su modalidad Stream Cipher implica un riesgo altísimo colateral de vulnerar la privacidad sin recuperación donde reutilizar inofensivamente el *nonce base inicial*/contador rompa toda viabilidad de uso. |
+| **GCM** | Estándar de la industria para conexiones actuales (HTTPS, VPN, Archivos). Ambientes web pesados, comunicaciones corporativas, y protección donde se defina **AEAD**. | Puede demandar una computación fuerte a nivel software o hardware, por su encriptado en campos finitos sin una limitación previa de memoria para proveer de redundancias de seguridad por colisión. |
+
+* *Mención fundamental a los modos AEAD robustos (Authenticated Encryption with Associated Data) como lo es el **GCM**:*
+A diferencia del modo heredado CBC tradicional que se confina a la clandestinidad de que un intruso pasivo no obtenga la decodificación encriptada (*secreto confidencial*), un algoritmo basado en modo **AEAD GCM (Galois/Counter Mode)** adjuntarán además un *autenticidad general* junto con una *prueba inmutable de integridad*, emitiendo validadores algoritmicos de tipo Tag Autenticativo criptográfico. Con este MAC incorporado y verificado en la cadena el interceptor no solo desconoce el envío de la red, si no en caso de tratar de interceptarlo, manipular bytes cifrados y alterar su contenido maliciosamente inyectándolos fallará estrepitosamente al corroborar la validez de las firmas locales o remotas en las rutinas de desecho automáticas, bloqueando los accesos impuros.
+
+* **Requisitos de uso práctico (Código demostrativo para invocar utilidades seguras usando un estándar AEAD GCM AES con al menos dos vertientes en lenguajes populares):**
+
+  * **Uso estándar de librerías seguras recomendado en (Python usando `PyCryptodome` en GCM):**
+    ```python
+    from Crypto.Cipher import AES
+    import secrets
+
+    llave = secrets.token_bytes(32) # Standard AES-256
+    cipher_seguro = AES.new(llave, AES.MODE_GCM) # GCM Interno autogenera al vuelo un nonce aleatorio iterativo
+    
+    # Proveer la información con retorno redundante
+    texto_cifrado, tag_seguridad_diferido = cipher_seguro.encrypt_and_digest(b"Informacion UltraSecreta bancaria proveniente de Python App.")
+    
+    # En la recepción, es obligatorio pasar la clave, el texto_cifrado, cipher.nonce inicial y por supuesto el hash MAC de tag de integridad del payload blindado.
+    ```
+  
+  * **Uso estándar base con (JavaScript integrando Node.js Crypto Package nativamente usando GCM):**
+    ```javascript
+    const crypto = require('crypto');
+
+    const claveMestra = crypto.randomBytes(32); // Asignando formato a 256 bits fuertes.
+    const ivTolerado = crypto.randomBytes(12);  // NIST impone para operaciones criptográficas seguras de un GCM una medida específica preferiblemente a un límite de 96 bits.
+
+    // Config de protocolo seguro garantizado AES-256-GCM.
+    const cipherGCM = crypto.createCipheriv('aes-256-gcm', claveMestra, ivTolerado);
+    
+    let encriptado = cipherGCM.update('Protegiendo conexiones API desde JS de punta a punta', 'utf8', 'hex');
+    encriptado += cipherGCM.final('hex');
+    const authTagProtegido = cipherGCM.getAuthTag().toString('hex'); // Estampa intrínseca de protección de colisión/integridad que viaja junto el cipher payload hacia la base de datos o front-end.
+    ```
+
+## Proceso de Testing (Documentación original extra)
 He agregado un archivo en `tests/test_ciphers.py` usando `unittest`. Las pruebas validan los requisitos básicos y técnicos:
 1. `test_des_ecb_encryption_decryption`: Prueba del padding PKCS#7 manual en DES-ECB. Si a un `ciphertext` le falta padding o este es invlálido, el descifrado lanza un error. Si un string o input bytes tiene un tamaño "incomodo" lo convierte y lo ajusta con padding antes de empaquetar, resultando en tamaño con un múltiplo de bloque válido, para luego ser descifrado comprobando que se iguala al `plaintext` original sin alteración.
 2. `test_3des_cbc_encryption_decryption`: Prueba los esquemas de tamaño de llaves de 2 llaves (16 bytes) y 3 llaves (24 bytes). Además, comprueba que generar un criptograma con el mismo texto y clave, pero con un IV diferente (en el emisor) cambia completamente el layout final del `ciphertext` garantizando seguridad contra replay attacks y variaciones en colisiones, retornando en un mensaje `plaintext` recuperable sólo con el par unívoco IV + CLAVE.
+
